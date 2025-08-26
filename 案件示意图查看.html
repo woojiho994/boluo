@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>生态环境部华南环境科学研究所</title>
+	<style>
+		:root {
+			--accent: #ff6a00;
+			--accent-2: #00b3ff;
+			--bg-overlay: rgba(0,0,0,.78);
+		}
+
+		html, body {
+			margin: 0;
+			padding: 0;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+			background: #0b0c10;
+			color: #e6e6e6;
+		}
+
+		.container {
+			max-width: min(96vw, 1600px);
+			margin: 16px auto 32px;
+			padding: 0 8px;
+		}
+
+		.toolbar {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			background: #12141a;
+			border: 1px solid #1f2330;
+			border-radius: 10px;
+			padding: 10px 12px;
+			position: sticky;
+			top: 8px;
+			z-index: 50;
+		}
+
+		.toolbar .spacer { flex: 1; }
+
+		.toolbar label {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			cursor: pointer;
+			user-select: none;
+		}
+
+		.toolbar button.primary {
+			background: var(--accent);
+			color: #fff;
+			border: none;
+			padding: 8px 12px;
+			border-radius: 8px;
+			cursor: pointer;
+			font-weight: 600;
+		}
+
+		.map-wrap {
+			position: relative;
+			margin-top: 12px;
+			background: #0e1117;
+			border: 1px solid #1f2330;
+			border-radius: 12px;
+			overflow: hidden;
+		}
+
+		.map-wrap img.basemap {
+			display: block;
+			width: 100%;
+			height: auto;
+			user-select: none;
+			pointer-events: none; /* 防止图片抢占点击 */
+		}
+
+		/* 热点：绝对定位，使用百分比控制位置和尺寸 */
+		.hotspot {
+			position: absolute;
+			border: none;
+			background: transparent;
+			padding: 0;
+			margin: 0;
+			cursor: pointer;
+			outline: none;
+		}
+		/* 默认隐藏外观，仅保留可点击区域；启用开关后显示边框和半透明背景以方便对齐 */
+		.show-hotspots .hotspot {
+			border: 2px dashed rgba(255,106,0,.7);
+			background: rgba(255,106,0,.12);
+			box-shadow: 0 0 0 1px rgba(0,0,0,.25) inset;
+		}
+
+		.hotspot .label {
+			position: absolute;
+			left: 4px;
+			top: 4px;
+			background: rgba(0,0,0,.6);
+			color: #fff;
+			font-size: 12px;
+			padding: 2px 6px;
+			border-radius: 6px;
+			pointer-events: none;
+			opacity: 0;
+			transition: opacity .15s ease;
+		}
+		.show-hotspots .hotspot .label { opacity: 1; }
+
+		/* 弹窗（灯箱） */
+		.lightbox {
+			position: fixed;
+			inset: 0;
+			display: none;
+			place-items: center;
+			background: var(--bg-overlay);
+			z-index: 1000;
+		}
+		.lightbox.open { display: grid; }
+
+		.lightbox .frame {
+			position: relative;
+			width: min(96vw, 1280px);
+			height: min(96dvh, 96vh);
+			background: #0e1117;
+			border: 1px solid #2a2f3a;
+			border-radius: 12px;
+			overflow: hidden;
+			display: grid;
+			grid-template-rows: auto 1fr auto;
+		}
+
+		.lightbox header,
+		.lightbox footer {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			padding: 8px 12px;
+			background: #12141a;
+			border-bottom: 1px solid #1f2330;
+		}
+		.lightbox footer {
+			border-top: 1px solid #1f2330;
+			border-bottom: none;
+		}
+		.lightbox header .title { font-weight: 700; }
+		.lightbox header .subtitle { opacity: .75; font-size: 12px; margin-left: 6px; }
+
+		.viewer {
+			position: relative;
+			background: #0b0d13;
+			display: grid;
+			place-items: center;
+		}
+		.viewer img {
+			max-width: 100%;
+			max-height: 100%;
+			object-fit: contain;
+			image-rendering: auto;
+			background: #0b0d13;
+		}
+
+		/* 控制按钮 */
+		.nav-btn, .close-btn {
+			position: absolute;
+			top: 50%;
+			transform: translateY(-50%);
+			background: rgba(0,0,0,.5);
+			color: #fff;
+			border: 1px solid rgba(255,255,255,.25);
+			border-radius: 10px;
+			padding: 8px 10px;
+			cursor: pointer;
+			user-select: none;
+		}
+		.nav-btn:hover, .close-btn:hover { background: rgba(0,0,0,.7); }
+		.nav-btn.left { left: 8px; }
+		.nav-btn.right { right: 8px; }
+		.close-btn { top: 8px; right: 8px; transform: none; }
+
+		.index-indicator {
+			font-variant-numeric: tabular-nums;
+			opacity: .9;
+		}
+
+		.note {
+			margin-top: 8px;
+			opacity: .8;
+			font-size: 13px;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="toolbar">
+			<strong>梁锦昌博罗县园洲镇无证照加工厂案件</strong>
+			<span class="spacer"></span>
+			<button id="btnShowAll" class="primary" type="button">查看全部细节</button>
+			<label title="显示/隐藏热点的可视边框（仅用于校对位置）">
+				<input id="toggleOutlines" type="checkbox" /> 显示热点边框
+			</label>
+		</div>
+
+		<div id="map" class="map-wrap" aria-label="底图">
+			<img class="basemap" src="./底图.png" alt="底图" />
+			<!-- 热点将由脚本注入到此容器中 -->
+		</div>
+
+		<p class="note">提示：勾选“显示热点边框”以校对/调整区域；实际查看时可保持关闭以获得干净观感。</p>
+	</div>
+
+	<!-- 灯箱弹窗 -->
+	<div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="细节预览">
+		<div class="frame">
+			<header>
+				<div>
+					<span class="title" id="lbTitle">细节预览</span>
+					<span class="subtitle" id="lbSubtitle"></span>
+				</div>
+				<button id="btnCloseTop" class="close-btn" type="button" aria-label="关闭">✕</button>
+			</header>
+			<div class="viewer">
+				<button id="btnPrev" class="nav-btn left" type="button" aria-label="上一张">◀</button>
+				<img id="lbImage" src="" alt="预览图" />
+				<button id="btnNext" class="nav-btn right" type="button" aria-label="下一张">▶</button>
+			</div>
+			<footer>
+				<div class="index-indicator" id="lbIndex">0 / 0</div>
+				<div style="opacity:.8">按键盘 ←/→ 可切换，Esc 关闭</div>
+			</footer>
+		</div>
+	</div>
+
+	<script>
+		// ========== 可配置：热点区域与图片映射 ==========
+		// 使用百分比定义热点矩形，便于在不同屏幕尺寸下保持相对位置
+		const REGIONS = [
+			{
+				id: 'region-1',
+				rect: { left: '31%', top: '58%', width: '5%', height: '8%' },
+				images: ['1-1.png','1-2.png','1-3.png','1-5.png','1-6.png']
+			},
+			{
+				id: 'region-2',
+				rect: { left: '35%', top: '50%', width: '12%', height: '10%' },
+				images: ['2-1.png','2-2.png','2-3.png','2-4.png','2-5.png','2-6.png']
+			},
+			{
+				id: 'region-3',
+				rect: { left: '47%', top: '45%', width: '3%', height: '13%' },
+				images: ['3-1.png','3-2.png']
+			},
+			{
+				id: 'region-4',
+				rect: { left: '38%', top: '25%', width: '11%', height: '20%' },
+				images: ['4-1.png','4-2.png','4-3.png','4-4.png']
+			},
+			{
+				id: 'region-5',
+				rect: { left: '49%', top: '29%', width: '3%', height: '14%' },
+				images: ['5-1.jpg','5-2.png','5-3.jpg']
+			},
+			{
+				id: 'region-6',
+				rect: { left: '50%', top: '45%', width: '5%', height: '14%' },
+				images: ['6-1.png','6-2.png','6-3.jpg','6-4.jpg','6-5.png']
+			},
+			{
+				id: 'region-7',
+				rect: { left: '52%', top: '37%', width: '6%', height: '7%' },
+				images: ['7-1.jpg']
+			},
+			{
+				id: 'region-8',
+				rect: { left: '55%', top: '45%', width: '5%', height: '15%' },
+				images: ['8-1.png']
+			},
+			{
+				id: 'region-9',
+				rect: { left: '60%', top: '46%', width: '8%', height: '15%' },
+				images: ['9-1.png','9-2.png','9-3.png','9-4.png','9-5.png','9-6.png']
+			},
+			{
+				id: 'region-10',
+				rect: { left: '69%', top: '50%', width: '3%', height: '8%' },
+				images: ['10-1.jpg']
+			},
+			
+			
+		];
+
+		// 预加载所有可能的图片，减少弹出时的空白
+		function preloadImages(imagePaths) {
+			imagePaths.forEach(p => { const i = new Image(); i.src = p; });
+		}
+		preloadImages([...new Set(REGIONS.flatMap(r => r.images))]);
+
+		// 注入热点 DOM
+		const mapEl = document.getElementById('map');
+		REGIONS.forEach(region => {
+			const btn = document.createElement('button');
+			btn.className = 'hotspot';
+			btn.type = 'button';
+			btn.setAttribute('aria-label', region.name);
+			btn.style.left = region.rect.left;
+			btn.style.top = region.rect.top;
+			btn.style.width = region.rect.width;
+			btn.style.height = region.rect.height;
+
+			const label = document.createElement('span');
+			label.className = 'label';
+			label.textContent = region.name;
+			btn.appendChild(label);
+
+			btn.addEventListener('click', () => openLightbox(region.images, region.name));
+			mapEl.appendChild(btn);
+		});
+
+		// 辅助：查看全部按钮
+		const btnShowAll = document.getElementById('btnShowAll');
+		btnShowAll.addEventListener('click', () => {
+			const all = [...new Set(REGIONS.flatMap(r => r.images))];
+			openLightbox(all, '全部细节');
+		});
+
+		// 热点外观开关
+		const toggle = document.getElementById('toggleOutlines');
+		const root = document.body;
+		toggle.addEventListener('change', () => {
+			root.classList.toggle('show-hotspots', toggle.checked);
+		});
+		// 默认显示一次，便于初次调整；如不需要，可改为 false
+		toggle.checked = true;
+		root.classList.add('show-hotspots');
+
+		// ========== 灯箱逻辑 ==========
+		const lightbox = document.getElementById('lightbox');
+		const lbImage = document.getElementById('lbImage');
+		const lbIndex = document.getElementById('lbIndex');
+		const lbTitle = document.getElementById('lbTitle');
+		const lbSubtitle = document.getElementById('lbSubtitle');
+		const btnPrev = document.getElementById('btnPrev');
+		const btnNext = document.getElementById('btnNext');
+		const btnCloseTop = document.getElementById('btnCloseTop');
+
+		let currentList = [];
+		let currentIndex = 0;
+
+		function openLightbox(images, title) {
+			if (!images || images.length === 0) return;
+			currentList = images;
+			currentIndex = 0;
+			lbTitle.textContent = '细节预览';
+			lbSubtitle.textContent = title ? `— ${title}` : '';
+			updateViewer();
+			lightbox.classList.add('open');
+			// 焦点管理：将焦点置于下一张按钮便于键盘切换
+			btnNext.focus();
+		}
+
+		function updateViewer() {
+			const src = currentList[currentIndex];
+			lbImage.src = src;
+			lbIndex.textContent = `${currentIndex + 1} / ${currentList.length}`;
+		}
+
+		function next() {
+			currentIndex = (currentIndex + 1) % currentList.length;
+			updateViewer();
+		}
+		function prev() {
+			currentIndex = (currentIndex - 1 + currentList.length) % currentList.length;
+			updateViewer();
+		}
+		function closeLightbox() {
+			lightbox.classList.remove('open');
+		}
+
+		btnNext.addEventListener('click', next);
+		btnPrev.addEventListener('click', prev);
+		btnCloseTop.addEventListener('click', closeLightbox);
+		lightbox.addEventListener('click', (e) => {
+			// 点击遮罩关闭（但不包括内部框架点击）
+			if (e.target === lightbox) closeLightbox();
+		});
+		document.addEventListener('keydown', (e) => {
+			if (!lightbox.classList.contains('open')) return;
+			if (e.key === 'Escape') closeLightbox();
+			if (e.key === 'ArrowRight') next();
+			if (e.key === 'ArrowLeft') prev();
+		});
+	</script>
+</body>
+</html> 
